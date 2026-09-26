@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: erp-simulator
+
+server:
+  port: 8081

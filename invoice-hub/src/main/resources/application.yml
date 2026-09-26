@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: invoice-hub
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/invoicehub}
+    username: ${DB_USER:invoicehub}
+    password: ${DB_PASSWORD:invoicehub}
