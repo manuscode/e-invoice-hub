@@ -30,6 +30,6 @@ class KosItValidator {
             throw new IllegalStateException("KoSIT validation could not be processed: " + result.getProcessingErrors());
         }
         String reportHtml = String.join("\n", htmlExtractor.extractAsString(result.getReport()));
-        return new ValidationResult.Checked(format, result.isAcceptable(), reportHtml);
+        return new ValidationResult.Checked(format, content, result.isAcceptable(), reportHtml);
     }
 }

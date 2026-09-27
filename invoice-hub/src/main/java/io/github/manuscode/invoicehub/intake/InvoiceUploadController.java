@@ -2,6 +2,7 @@ package io.github.manuscode.invoicehub.intake;
 
 import io.github.manuscode.invoicehub.invoice.Channel;
 import io.github.manuscode.invoicehub.invoice.Invoice;
+import io.github.manuscode.invoicehub.invoice.ReceivedInvoice;
 import java.io.IOException;
 import java.net.URI;
 import org.springframework.http.HttpStatus;
@@ -27,7 +28,12 @@ class InvoiceUploadController {
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is empty");
         }
-        Invoice invoice = intakeService.receive(new RawDocument(file.getOriginalFilename(), file.getBytes(), Channel.REST));
+        ReceivedInvoice received =
+                intakeService.receive(new RawDocument(file.getOriginalFilename(), file.getBytes(), Channel.REST));
+        if (received.alreadyKnown()) {
+            return ResponseEntity.ok(received.invoice());
+        }
+        Invoice invoice = received.invoice();
         return ResponseEntity.created(URI.create("/api/invoices/" + invoice.id())).body(invoice);
     }
 }

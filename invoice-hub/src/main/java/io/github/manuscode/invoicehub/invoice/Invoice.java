@@ -12,10 +12,12 @@ public record Invoice(
         InvoiceFormat format,
         InvoiceStatus status,
         RejectionReason rejectionReason,
-        Instant receivedAt) {
+        Instant receivedAt,
+        InvoiceData data,
+        UUID duplicateOf) {
 
     static Invoice received(UUID id, Channel channel, String filename, Instant receivedAt) {
-        return new Invoice(id, channel, filename, null, InvoiceStatus.RECEIVED, null, receivedAt);
+        return new Invoice(id, channel, filename, null, InvoiceStatus.RECEIVED, null, receivedAt, null, null);
     }
 
     Invoice validated(ValidationResult result) {
@@ -31,7 +33,15 @@ public record Invoice(
         };
     }
 
+    Invoice mapped(InvoiceData data) {
+        return new Invoice(id, channel, filename, format, status, rejectionReason, receivedAt, data, duplicateOf);
+    }
+
+    Invoice duplicateOf(UUID original) {
+        return new Invoice(id, channel, filename, format, InvoiceStatus.DUPLICATE, null, receivedAt, data, original);
+    }
+
     private Invoice withOutcome(InvoiceFormat format, InvoiceStatus status, RejectionReason rejectionReason) {
-        return new Invoice(id, channel, filename, format, status, rejectionReason, receivedAt);
+        return new Invoice(id, channel, filename, format, status, rejectionReason, receivedAt, data, duplicateOf);
     }
 }

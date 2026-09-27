@@ -6,37 +6,52 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import tools.jackson.databind.json.JsonMapper;
 
 @Repository
 class InvoiceRepository {
 
-    private final JdbcClient jdbcClient;
+    private static final String INVOICE_COLUMNS = """
+            id, channel, filename, format, status, rejection_reason, received_at, data, duplicate_of
+            """;
 
-    InvoiceRepository(JdbcClient jdbcClient) {
+    private final JdbcClient jdbcClient;
+    private final JsonMapper jsonMapper;
+    private final RowMapper<Invoice> invoiceRowMapper = this::toInvoice;
+
+    InvoiceRepository(JdbcClient jdbcClient, JsonMapper jsonMapper) {
         this.jdbcClient = jdbcClient;
+        this.jsonMapper = jsonMapper;
     }
 
-    void insert(Invoice invoice, byte[] content) {
-        jdbcClient.sql("""
-                        insert into invoice (id, channel, filename, content, status, received_at)
-                        values (:id, :channel, :filename, :content, :status, :receivedAt)
+    boolean insertIfNew(Invoice invoice, byte[] content, byte[] contentHash) {
+        return jdbcClient.sql("""
+                        insert into invoice (id, channel, filename, content, content_sha256, status, received_at)
+                        values (:id, :channel, :filename, :content, :contentHash, :status, :receivedAt)
+                        on conflict (content_sha256) do nothing
                         """)
                 .param("id", invoice.id())
                 .param("channel", invoice.channel().name())
                 .param("filename", invoice.filename())
                 .param("content", content)
+                .param("contentHash", contentHash)
                 .param("status", invoice.status().name())
                 .param("receivedAt", Timestamp.from(invoice.receivedAt()))
-                .update();
+                .update() == 1;
     }
 
-    void updateValidation(Invoice invoice, String validationReport) {
+    /**
+     * @throws org.springframework.dao.DuplicateKeyException if another original with the same key exists
+     */
+    void updateValidation(Invoice invoice, BusinessKey key, String validationReport) {
         int updatedRows = jdbcClient.sql("""
                         update invoice
                         set format = :format, status = :status, rejection_reason = :rejectionReason,
-                            validation_report = :validationReport
+                            validation_report = :validationReport, data = cast(:data as jsonb),
+                            seller_key = :sellerKey, invoice_number = :invoiceNumber, duplicate_of = :duplicateOf
                         where id = :id
                         """)
                 .param("id", invoice.id())
@@ -44,6 +59,10 @@ class InvoiceRepository {
                 .param("status", invoice.status().name())
                 .param("rejectionReason", nameOrNull(invoice.rejectionReason()))
                 .param("validationReport", validationReport)
+                .param("data", invoice.data() == null ? null : jsonMapper.writeValueAsString(invoice.data()))
+                .param("sellerKey", key == null ? null : key.seller())
+                .param("invoiceNumber", key == null ? null : key.invoiceNumber())
+                .param("duplicateOf", invoice.duplicateOf())
                 .update();
         if (updatedRows != 1) {
             throw new IllegalStateException("Invoice " + invoice.id() + " not found for update");
@@ -51,12 +70,27 @@ class InvoiceRepository {
     }
 
     Optional<Invoice> findById(UUID id) {
-        return jdbcClient.sql("""
-                        select id, channel, filename, format, status, rejection_reason, received_at
-                        from invoice where id = :id
-                        """)
+        return jdbcClient.sql("select " + INVOICE_COLUMNS + " from invoice where id = :id")
                 .param("id", id)
-                .query(InvoiceRepository::toInvoice)
+                .query(invoiceRowMapper)
+                .optional();
+    }
+
+    Optional<Invoice> findByContentHash(byte[] contentHash) {
+        return jdbcClient.sql("select " + INVOICE_COLUMNS + " from invoice where content_sha256 = :contentHash")
+                .param("contentHash", contentHash)
+                .query(invoiceRowMapper)
+                .optional();
+    }
+
+    Optional<UUID> findOriginal(BusinessKey key) {
+        return jdbcClient.sql("""
+                        select id from invoice
+                        where seller_key = :sellerKey and invoice_number = :invoiceNumber and duplicate_of is null
+                        """)
+                .param("sellerKey", key.seller())
+                .param("invoiceNumber", key.invoiceNumber())
+                .query(UUID.class)
                 .optional();
     }
 
@@ -67,9 +101,10 @@ class InvoiceRepository {
                 .optional();
     }
 
-    private static Invoice toInvoice(ResultSet row, int rowNumber) throws SQLException {
+    private Invoice toInvoice(ResultSet row, int rowNumber) throws SQLException {
         String format = row.getString("format");
         String rejectionReason = row.getString("rejection_reason");
+        String data = row.getString("data");
         return new Invoice(
                 row.getObject("id", UUID.class),
                 Channel.valueOf(row.getString("channel")),
@@ -77,7 +112,9 @@ class InvoiceRepository {
                 format == null ? null : InvoiceFormat.valueOf(format),
                 InvoiceStatus.valueOf(row.getString("status")),
                 rejectionReason == null ? null : RejectionReason.valueOf(rejectionReason),
-                row.getTimestamp("received_at").toInstant());
+                row.getTimestamp("received_at").toInstant(),
+                data == null ? null : jsonMapper.readValue(data, InvoiceData.class),
+                row.getObject("duplicate_of", UUID.class));
     }
 
     private static String nameOrNull(Enum<?> value) {

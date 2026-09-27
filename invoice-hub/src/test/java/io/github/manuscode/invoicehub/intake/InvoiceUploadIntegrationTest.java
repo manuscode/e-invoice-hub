@@ -7,6 +7,7 @@ import io.github.manuscode.invoicehub.TestcontainersConfiguration;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,6 +16,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
@@ -26,6 +28,15 @@ class InvoiceUploadIntegrationTest {
 
     @Autowired
     private MockMvcTester mockMvc;
+
+    @Autowired
+    private JdbcClient jdbcClient;
+
+    // The valid samples are the same invoice, without cleanup later uploads would be duplicates.
+    @BeforeEach
+    void deleteInvoices() {
+        jdbcClient.sql("delete from invoice").update();
+    }
 
     @Test
     void acceptsValidXRechnungUbl() throws IOException {

@@ -1,7 +1,7 @@
 package io.github.manuscode.invoicehub.intake;
 
-import io.github.manuscode.invoicehub.invoice.Invoice;
 import io.github.manuscode.invoicehub.invoice.InvoiceService;
+import io.github.manuscode.invoicehub.invoice.ReceivedInvoice;
 import io.github.manuscode.invoicehub.validation.ValidationResult;
 import io.github.manuscode.invoicehub.validation.ValidationService;
 import org.springframework.stereotype.Service;
@@ -17,10 +17,13 @@ public class IntakeService {
         this.validationService = validationService;
     }
 
-    public Invoice receive(RawDocument document) {
+    public ReceivedInvoice receive(RawDocument document) {
         // Stored before validation, so the document is not lost if validation fails for technical reasons.
-        Invoice received = invoiceService.receive(document.filename(), document.content(), document.channel());
+        ReceivedInvoice received = invoiceService.receive(document.filename(), document.content(), document.channel());
+        if (received.alreadyKnown()) {
+            return received;
+        }
         ValidationResult result = validationService.validate(document.content());
-        return invoiceService.completeValidation(received, result);
+        return new ReceivedInvoice(invoiceService.completeValidation(received.invoice(), result), false);
     }
 }
