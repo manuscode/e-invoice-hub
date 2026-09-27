@@ -12,6 +12,13 @@
 
     <artifactId>invoice-hub</artifactId>
 
+    <properties>
+        <kosit-validator.version>1.6.3</kosit-validator.version>
+        <xrechnung-configuration.release>2026-08-31</xrechnung-configuration.release>
+        <xrechnung-configuration.file>xrechnung-3.0.2-validator-configuration-${xrechnung-configuration.release}.zip</xrechnung-configuration.file>
+        <xrechnung-configuration.sha256>2530cd107c414511c5d0462ec10f886910395abfca820db82e83d70bf01221a8</xrechnung-configuration.sha256>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -42,10 +49,25 @@
             <groupId>org.springframework.modulith</groupId>
             <artifactId>spring-modulith-starter-core</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.kosit</groupId>
+            <artifactId>validator</artifactId>
+            <version>${kosit-validator.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+            <scope>runtime</scope>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -67,6 +89,26 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.googlecode.maven-download-plugin</groupId>
+                <artifactId>download-maven-plugin</artifactId>
+                <version>1.13.0</version>
+                <executions>
+                    <execution>
+                        <id>download-xrechnung-configuration</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <uri>https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/v${xrechnung-configuration.release}/${xrechnung-configuration.file}</uri>
+                            <sha256>${xrechnung-configuration.sha256}</sha256>
+                            <unpack>true</unpack>
+                            <outputDirectory>${project.build.outputDirectory}/kosit/xrechnung</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
