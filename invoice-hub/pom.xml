@@ -17,6 +17,7 @@
         <xrechnung-configuration.release>2026-08-31</xrechnung-configuration.release>
         <xrechnung-configuration.file>xrechnung-3.0.2-validator-configuration-${xrechnung-configuration.release}.zip</xrechnung-configuration.file>
         <xrechnung-configuration.sha256>2530cd107c414511c5d0462ec10f886910395abfca820db82e83d70bf01221a8</xrechnung-configuration.sha256>
+        <mustang.version>2.26.0</mustang.version>
     </properties>
 
     <dependencies>
@@ -53,6 +54,11 @@
             <groupId>org.kosit</groupId>
             <artifactId>validator</artifactId>
             <version>${kosit-validator.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mustangproject</groupId>
+            <artifactId>library</artifactId>
+            <version>${mustang.version}</version>
         </dependency>
         <dependency>
             <groupId>org.glassfish.jaxb</groupId>

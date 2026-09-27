@@ -13,7 +13,14 @@ public class ValidationService {
 
     public ValidationResult validate(byte[] content) {
         return FormatDetector.detect(content)
-                .<ValidationResult>map(format -> kosItValidator.validate(content, format))
+                .map(this::validate)
                 .orElseGet(ValidationResult.UnsupportedFormat::new);
+    }
+
+    private ValidationResult validate(DetectedInvoice invoice) {
+        if (invoice.format() == InvoiceFormat.ZUGFERD && !ZugferdProfile.isEInvoice(invoice.xml())) {
+            return new ValidationResult.UnsupportedProfile(invoice.format());
+        }
+        return kosItValidator.validate(invoice.xml(), invoice.format());
     }
 }

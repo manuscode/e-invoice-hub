@@ -14,6 +14,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
@@ -45,6 +46,53 @@ class InvoiceUploadIntegrationTest {
         assertThat(mockMvc.get().uri("/api/invoices/{id}/report", invoiceId(upload)))
                 .hasStatusOk()
                 .bodyText().contains("BR-DE-15");
+    }
+
+    @Test
+    void acceptsValidXRechnungCii() throws IOException {
+        MvcTestResult upload = upload(sample("xrechnung-cii-valid.xml"));
+
+        assertThat(upload).hasStatus(HttpStatus.CREATED);
+        assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("VALID");
+        assertThat(upload).bodyJson().extractingPath("$.format").isEqualTo("XRECHNUNG_CII");
+    }
+
+    @Test
+    void rejectsInvalidXRechnungCiiWithReport() throws IOException {
+        MvcTestResult upload = upload(sample("xrechnung-cii-missing-buyer-reference.xml"));
+
+        assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("REJECTED");
+        assertThat(upload).bodyJson().extractingPath("$.rejectionReason").isEqualTo("VALIDATION_FAILED");
+        assertThat(mockMvc.get().uri("/api/invoices/{id}/report", invoiceId(upload)))
+                .hasStatusOk()
+                .bodyText().contains("BR-DE-15");
+    }
+
+    @Test
+    void acceptsValidZugferdEn16931Pdf() throws IOException {
+        MvcTestResult upload = upload(sample("zugferd-en16931.pdf"));
+
+        assertThat(upload).hasStatus(HttpStatus.CREATED);
+        assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("VALID");
+        assertThat(upload).bodyJson().extractingPath("$.format").isEqualTo("ZUGFERD");
+    }
+
+    @Test
+    void rejectsZugferdMinimumPdfAsUnsupportedProfile() throws IOException {
+        MvcTestResult upload = upload(sample("zugferd-minimum.pdf"));
+
+        assertThat(upload).hasStatus(HttpStatus.CREATED);
+        assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("REJECTED");
+        assertThat(upload).bodyJson().extractingPath("$.rejectionReason").isEqualTo("UNSUPPORTED_PROFILE");
+        assertThat(upload).bodyJson().extractingPath("$.format").isEqualTo("ZUGFERD");
+    }
+
+    @Test
+    void rejectsPdfWithoutEmbeddedInvoiceAsUnsupportedFormat() throws IOException {
+        MvcTestResult upload = upload(sample("pdf-without-invoice.pdf"));
+
+        assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("REJECTED");
+        assertThat(upload).bodyJson().extractingPath("$.rejectionReason").isEqualTo("UNSUPPORTED_FORMAT");
     }
 
     @Test
@@ -93,7 +141,8 @@ class InvoiceUploadIntegrationTest {
 
     private static MockMultipartFile sample(String name) throws IOException {
         byte[] content = new ClassPathResource("samples/" + name).getContentAsByteArray();
-        return new MockMultipartFile("file", name, "application/xml", content);
+        String contentType = name.endsWith(".pdf") ? MediaType.APPLICATION_PDF_VALUE : MediaType.APPLICATION_XML_VALUE;
+        return new MockMultipartFile("file", name, contentType, content);
     }
 
     private static String invoiceId(MvcTestResult upload) throws UnsupportedEncodingException {

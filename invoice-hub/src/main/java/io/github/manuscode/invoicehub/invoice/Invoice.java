@@ -22,6 +22,8 @@ public record Invoice(
         return switch (result) {
             case ValidationResult.UnsupportedFormat() ->
                     withOutcome(null, InvoiceStatus.REJECTED, RejectionReason.UNSUPPORTED_FORMAT);
+            case ValidationResult.UnsupportedProfile(InvoiceFormat format) ->
+                    withOutcome(format, InvoiceStatus.REJECTED, RejectionReason.UNSUPPORTED_PROFILE);
             case ValidationResult.Checked checked when checked.acceptable() ->
                     withOutcome(checked.format(), InvoiceStatus.VALID, null);
             case ValidationResult.Checked checked ->
