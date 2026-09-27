@@ -23,6 +23,17 @@ invoice-hub:
     base-url: ${ERP_BASE_URL:http://localhost:8081}
     connect-timeout: 2s
     read-timeout: 10s
+  mail:
+    protocol: imap
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:3143}
+    username: ${MAIL_USER:invoices}
+    password: ${MAIL_PASSWORD:invoices}
+    inbox-folder: INBOX
+    processed-folder: processed
+    unprocessed-folder: unprocessed
+    poll-interval: 30s
+    timeout: 10s
   delivery:
     retry:
       # Retries after 10s, 30s and 90s, then the event goes to the DLT
