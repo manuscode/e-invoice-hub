@@ -5,17 +5,28 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class InvoiceService {
 
-    private final InvoiceRepository repository;
+    private static final Logger log = LoggerFactory.getLogger(InvoiceService.class);
 
-    InvoiceService(InvoiceRepository repository) {
+    private final InvoiceRepository repository;
+    private final ApplicationEventPublisher events;
+    private final TransactionTemplate transaction;
+
+    InvoiceService(InvoiceRepository repository, ApplicationEventPublisher events, TransactionTemplate transaction) {
         this.repository = repository;
+        this.events = events;
+        this.transaction = transaction;
     }
 
     // Parallel calls with the same document are safe, the unique content hash decides which one stores it.
@@ -47,7 +58,7 @@ public class InvoiceService {
             return saveDuplicate(mapped, original.get(), key, checked.reportHtml());
         }
         try {
-            repository.updateValidation(mapped, key, checked.reportHtml());
+            accept(mapped, key, checked.reportHtml());
             return mapped;
         } catch (DuplicateKeyException concurrentOriginal) {
             // Another document with the same key became the original between lookup and update.
@@ -57,12 +68,41 @@ public class InvoiceService {
         }
     }
 
+    public void markDelivered(UUID id) {
+        changeStatus(id, InvoiceStatus.DELIVERED,
+                Set.of(InvoiceStatus.VALID, InvoiceStatus.DELIVERED, InvoiceStatus.DELIVERY_FAILED));
+    }
+
+    public void markDeliveryFailed(UUID id) {
+        // A late failure of a redelivered event must not overwrite a successful delivery.
+        changeStatus(id, InvoiceStatus.DELIVERY_FAILED, Set.of(InvoiceStatus.VALID, InvoiceStatus.DELIVERY_FAILED));
+    }
+
     public Optional<Invoice> findById(UUID id) {
         return repository.findById(id);
     }
 
     public Optional<String> findValidationReport(UUID id) {
         return repository.findValidationReport(id);
+    }
+
+    /**
+     * Invoice and event publication are committed together (outbox), so no accepted invoice misses the ERP. Only this
+     * step runs in a transaction: after a {@link DuplicateKeyException} Postgres aborts the transaction, but the caller
+     * still has to store the invoice as duplicate.
+     */
+    private void accept(Invoice invoice, BusinessKey key, String report) {
+        transaction.executeWithoutResult(status -> {
+            repository.updateValidation(invoice, key, report);
+            events.publishEvent(new InvoiceAccepted(invoice.id(), invoice.data()));
+        });
+    }
+
+    private void changeStatus(UUID id, InvoiceStatus target, Set<InvoiceStatus> allowedCurrent) {
+        if (!repository.updateStatus(id, target, allowedCurrent)) {
+            log.warn("Status of invoice {} not changed to {}: invoice is missing or its status is not one of {}",
+                    id, target, allowedCurrent);
+        }
     }
 
     private Invoice saveDuplicate(Invoice mapped, UUID original, BusinessKey key, String report) {

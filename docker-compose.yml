@@ -34,5 +34,15 @@ services:
       interval: 10s
       retries: 10
 
+  erp-simulator:
+    build:
+      context: .
+      dockerfile: erp-simulator/Dockerfile
+    environment:
+      ERP_LATENCY: 200ms
+      ERP_FAILURE_RATE: 0.1
+    ports:
+      - "8081:8081"
+
 volumes:
   postgres-data:

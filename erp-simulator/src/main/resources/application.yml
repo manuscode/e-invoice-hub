@@ -4,3 +4,7 @@ spring:
 
 server:
   port: 8081
+
+erp-simulator:
+  latency: ${ERP_LATENCY:0ms}
+  failure-rate: ${ERP_FAILURE_RATE:0.0}

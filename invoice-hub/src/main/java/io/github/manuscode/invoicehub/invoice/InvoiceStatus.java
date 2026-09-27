@@ -4,5 +4,7 @@ public enum InvoiceStatus {
     RECEIVED,
     VALID,
     REJECTED,
-    DUPLICATE
+    DUPLICATE,
+    DELIVERED,
+    DELIVERY_FAILED
 }

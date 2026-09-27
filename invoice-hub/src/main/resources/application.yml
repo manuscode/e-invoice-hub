@@ -5,3 +5,26 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/invoicehub}
     username: ${DB_USER:invoicehub}
     password: ${DB_PASSWORD:invoicehub}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    # Values are JSON, converted by the Jackson message converter of Spring Modulith.
+    producer:
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
+    consumer:
+      auto-offset-reset: earliest
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+  modulith:
+    events:
+      # Events that were saved but not sent to Kafka before a shutdown are sent after the restart.
+      republish-outstanding-events-on-restart: true
+
+invoice-hub:
+  erp:
+    base-url: ${ERP_BASE_URL:http://localhost:8081}
+    connect-timeout: 2s
+    read-timeout: 10s
+  delivery:
+    retry:
+      # Retries after 10s, 30s and 90s, then the event goes to the DLT
+      delay: 10s
+      multiplier: 3

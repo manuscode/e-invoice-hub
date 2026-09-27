@@ -5,6 +5,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -67,6 +68,17 @@ class InvoiceRepository {
         if (updatedRows != 1) {
             throw new IllegalStateException("Invoice " + invoice.id() + " not found for update");
         }
+    }
+
+    /**
+     * @return {@code false} if the invoice does not exist or its current status is not allowed
+     */
+    boolean updateStatus(UUID id, InvoiceStatus target, Set<InvoiceStatus> allowedCurrent) {
+        return jdbcClient.sql("update invoice set status = :target where id = :id and status in (:allowedCurrent)")
+                .param("id", id)
+                .param("target", target.name())
+                .param("allowedCurrent", allowedCurrent.stream().map(InvoiceStatus::name).toList())
+                .update() == 1;
     }
 
     Optional<Invoice> findById(UUID id) {
