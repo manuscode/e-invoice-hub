@@ -18,6 +18,11 @@ spring:
       # Events that were saved but not sent to Kafka before a shutdown are sent after the restart.
       republish-outstanding-events-on-restart: true
 
+logging:
+  level:
+    # Logs every SSH connection on INFO, so with every poll of the SFTP intake.
+    org.apache.sshd: warn
+
 invoice-hub:
   erp:
     base-url: ${ERP_BASE_URL:http://localhost:8081}
@@ -32,6 +37,20 @@ invoice-hub:
     inbox-folder: INBOX
     processed-folder: processed
     unprocessed-folder: unprocessed
+    poll-interval: 30s
+    timeout: 10s
+  sftp:
+    host: ${SFTP_HOST:localhost}
+    port: ${SFTP_PORT:2222}
+    username: ${SFTP_USER:invoices}
+    # For the SFTP server from docker-compose.yml. Relative to invoice-hub, the working directory of spring-boot:run.
+    private-key: ${SFTP_PRIVATE_KEY:file:../docker/sftp/invoice-hub_ecdsa}
+    known-hosts: ${SFTP_KNOWN_HOSTS:file:../docker/sftp/known_hosts}
+    inbox-directory: /inbox
+    processed-directory: /processed
+    failed-directory: /failed
+    # Files changed more recently may still be uploaded.
+    min-file-age: 5s
     poll-interval: 30s
     timeout: 10s
   delivery:

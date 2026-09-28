@@ -57,5 +57,17 @@ services:
       - "3025:3025"
       - "3143:3143"
 
+  sftp:
+    image: atmoz/sftp:alpine@sha256:a81ea210713555be76075b4b2788a4addfaa54d137cd881f3a99ac539f0be2c5
+    # User without password, login only with the key of invoice-hub. Keys in docker/sftp are for local use only.
+    command: invoices::1001:100:inbox,processed,failed
+    volumes:
+      - ./docker/sftp/invoice-hub_ecdsa.pub:/home/invoices/.ssh/keys/invoice-hub_ecdsa.pub:ro
+      # Fixed host key, so docker/sftp/known_hosts stays valid when the container is recreated. Only RSA, because
+      # the SSH client of invoice-hub (Apache MINA SSHD) can't read ed25519 keys without an additional provider.
+      - ./docker/sftp/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key
+    ports:
+      - "2222:22"
+
 volumes:
   postgres-data:
