@@ -6,6 +6,7 @@ import jakarta.mail.internet.MimeMessage;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import org.eclipse.angus.mail.imap.IMAPFolder;
 import org.slf4j.Logger;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Component;
 class MailIntake implements MessageHandler {
 
     private static final Logger log = LoggerFactory.getLogger(MailIntake.class);
+    private static final String MISSING_MESSAGE_ID = "<no Message-ID>";
 
     private final IntakeService intakeService;
     private final MailIntakeProperties properties;
@@ -46,8 +48,9 @@ class MailIntake implements MessageHandler {
     }
 
     private void receive(MimeMessage mail) throws MessagingException {
-        // Read before the move, afterwards the mail is no longer accessible in the inbox.
-        String messageId = mail.getMessageID();
+        // Read before the move, afterwards the mail is no longer accessible in the inbox. No fallback to the subject
+        // for mails without Message-ID: it is untrusted input and may contain personal data.
+        String messageId = Objects.requireNonNullElse(mail.getMessageID(), MISSING_MESSAGE_ID);
         Optional<List<RawDocument>> documents = read(mail, messageId);
         if (documents.isEmpty()) {
             // Not readable, the reason is already logged.

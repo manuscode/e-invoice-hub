@@ -101,6 +101,17 @@ class MailIntakeIntegrationTest {
     }
 
     @Test
+    void logsMailWithoutMessageIdWithPlaceholder(CapturedOutput output) throws Exception {
+        send(new MimeMessageWithoutMessageId(smtpSession()), "Rechnung ohne Message-ID",
+                Map.of("xrechnung-ubl-valid.xml", new ClassPathResource("samples/xrechnung-ubl-valid.xml")));
+
+        await().atMost(PROCESSING_TIMEOUT).untilAsserted(() ->
+                assertThat(subjectsIn("processed")).contains("Rechnung ohne Message-ID"));
+        assertThat(output).contains("Received 1 document(s) from mail <no Message-ID>")
+                .doesNotContain("from mail null");
+    }
+
+    @Test
     void keepsPollingWhileMailboxIsUnreachable(CapturedOutput output) throws Exception {
         var docker = greenMail.getDockerClient();
         docker.pauseContainerCmd(greenMail.getContainerId()).exec();
@@ -131,10 +142,11 @@ class MailIntakeIntegrationTest {
     }
 
     private void send(String subject, Map<String, InputStreamSource> attachments) throws MessagingException {
-        Properties smtp = new Properties();
-        smtp.put("mail.smtp.host", greenMail.getHost());
-        smtp.put("mail.smtp.port", String.valueOf(greenMail.smtpPort()));
-        MimeMessage mail = new MimeMessage(Session.getInstance(smtp));
+        send(new MimeMessage(smtpSession()), subject, attachments);
+    }
+
+    private void send(MimeMessage mail, String subject, Map<String, InputStreamSource> attachments)
+            throws MessagingException {
         MimeMessageHelper helper = new MimeMessageHelper(mail, !attachments.isEmpty());
         helper.setFrom("buchhaltung@lieferant.example");
         helper.setTo(GreenMailContainer.ADDRESS);
@@ -144,6 +156,13 @@ class MailIntakeIntegrationTest {
             helper.addAttachment(attachment.getKey(), attachment.getValue());
         }
         Transport.send(mail);
+    }
+
+    private Session smtpSession() {
+        Properties smtp = new Properties();
+        smtp.put("mail.smtp.host", greenMail.getHost());
+        smtp.put("mail.smtp.port", String.valueOf(greenMail.smtpPort()));
+        return Session.getInstance(smtp);
     }
 
     private List<String> subjectsIn(String folderName) throws MessagingException {
@@ -172,5 +191,17 @@ class MailIntakeIntegrationTest {
     }
 
     private record StoredInvoice(String channel, String filename, String status) {
+    }
+
+    // Transport.send sets a Message-ID, but mails sent by other clients, e.g. curl in the demo, may have none.
+    private static class MimeMessageWithoutMessageId extends MimeMessage {
+
+        MimeMessageWithoutMessageId(Session session) {
+            super(session);
+        }
+
+        @Override
+        protected void updateMessageID() {
+        }
     }
 }
