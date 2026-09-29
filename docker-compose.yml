@@ -1,4 +1,42 @@
 services:
+  # For the hub from the IDE (spring-boot:run) start the stack without it: docker compose up -d --scale invoice-hub=0
+  invoice-hub:
+    build:
+      context: .
+      dockerfile: invoice-hub/Dockerfile
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/invoicehub
+      DB_PASSWORD: invoicehub
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # The issuer is the URL clients on the host get their tokens from, see KC_HOSTNAME. The keys are loaded
+      # inside the compose network.
+      OAUTH2_ISSUER_URI: http://localhost:8180/realms/invoice-hub
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/invoice-hub/protocol/openid-connect/certs
+      ERP_BASE_URL: http://erp-simulator:8081
+      MAIL_HOST: greenmail
+      MAIL_PASSWORD: invoices
+      SFTP_HOST: sftp
+      SFTP_PORT: 22
+      SFTP_PRIVATE_KEY: file:/config/sftp/invoice-hub_ecdsa
+      SFTP_KNOWN_HOSTS: file:/config/sftp/known_hosts
+      OTLP_ENDPOINT: http://lgtm:4318
+    volumes:
+      - ./docker/sftp:/config/sftp:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/actuator/health > /dev/null"]
+      interval: 5s
+      start_period: 60s
+      retries: 10
+
   postgres:
     image: postgres:18-alpine
     environment:
@@ -79,6 +117,8 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Same issuer in all tokens, no matter if requested from the host or inside the compose network (k6).
+      KC_HOSTNAME: http://localhost:8180
     volumes:
       - ./docker/keycloak/invoice-hub-realm.json:/opt/keycloak/data/import/invoice-hub-realm.json:ro
     ports:

@@ -21,35 +21,35 @@ Small scope, but built like a real production system.
 ## Phases
 
 ### 1. Foundation
-- [ ] Project setup: Java 25, Spring Boot, Maven
-- [ ] Docker Compose (Postgres, Kafka)
-- [ ] CI with GitHub Actions
-- [ ] First ADRs
+- [x] Project setup: Java 25, Spring Boot, Maven
+- [x] Docker Compose (Postgres, Kafka)
+- [x] CI with GitHub Actions
+- [x] First ADRs
 
 ### 2. Receive & Validate
-- [ ] Upload via REST
-- [ ] Detect format: XRechnung (UBL, CII), ZUGFeRD
-- [ ] Validation with KoSIT rules
-- [ ] Validation report for each invoice
+- [x] Upload via REST
+- [x] Detect format: XRechnung (UBL, CII), ZUGFeRD
+- [x] Validation with KoSIT rules
+- [x] Validation report for each invoice
 
 ### 3. Processing
-- [ ] Map to internal invoice model
-- [ ] Detect duplicates (idempotency)
-- [ ] Send to ERP via Kafka, outbox pattern
-- [ ] Retry and dead letter queue when the ERP is not available
+- [x] Map to internal invoice model
+- [x] Detect duplicates (idempotency)
+- [x] Send to ERP via Kafka, outbox pattern
+- [x] Retry and dead letter queue when the ERP is not available
 
 ### 4. More Input Channels
-- [ ] Mailbox (IMAP)
-- [ ] SFTP
+- [x] Mailbox (IMAP)
+- [x] SFTP
 
 ### 5. Operations
-- [ ] Metrics, logs, tracing (OpenTelemetry, Grafana)
-- [ ] Load test with documented results
-- [ ] Security: auth, handling of sensitive data
+- [x] Metrics, logs, tracing (OpenTelemetry, Grafana)
+- [x] Load test with documented results
+- [x] Security: auth, handling of sensitive data
 
 ### 6. Presentation
-- [ ] README as case study
-- [ ] Local demo with sample data, start with one command
+- [x] README as case study
+- [x] Local demo with sample data, start with one command
 - [ ] Short video (2 min)
 
 ## Not in Scope
