@@ -2,6 +2,8 @@ package io.github.manuscode.invoicehub.delivery;
 
 import io.github.manuscode.invoicehub.invoice.InvoiceAccepted;
 import io.github.manuscode.invoicehub.invoice.InvoiceData;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -19,6 +21,10 @@ import org.springframework.web.client.RestClient;
 @Component
 @EnableConfigurationProperties(ErpProperties.class)
 class ErpClient {
+
+    // The body ends up in logs and DLT headers. An ERP that echoes the invoice must not leak its content there,
+    // and a huge body must not fill the memory.
+    private static final int MAX_REJECTION_BODY_BYTES = 500;
 
     private final RestClient restClient;
 
@@ -44,9 +50,18 @@ class ErpClient {
                 .retrieve()
                 .onStatus(ErpClient::isRejection, (request, response) -> {
                     throw new ErpRejectedException(invoice.invoiceId(), response.getStatusCode(),
-                            new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8));
+                            startOf(response.getBody()));
                 })
                 .toBodilessEntity();
+    }
+
+    private static String startOf(InputStream body) throws IOException {
+        // One byte more than the limit tells whether the body was cut.
+        byte[] start = body.readNBytes(MAX_REJECTION_BODY_BYTES + 1);
+        if (start.length <= MAX_REJECTION_BODY_BYTES) {
+            return new String(start, StandardCharsets.UTF_8);
+        }
+        return new String(start, 0, MAX_REJECTION_BODY_BYTES, StandardCharsets.UTF_8) + " [cut]";
     }
 
     // Timeout and rate limit are temporary, although they are client errors.

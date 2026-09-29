@@ -34,9 +34,12 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
@@ -58,6 +61,7 @@ import org.testcontainers.kafka.KafkaContainer;
         "spring.kafka.producer.properties.delivery.timeout.ms=2000"})
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
+@ExtendWith(OutputCaptureExtension.class)
 class ErpDeliveryIntegrationTest {
 
     private static final String DEAD_LETTER_TOPIC = "invoice-accepted-dlt";
@@ -156,7 +160,7 @@ class ErpDeliveryIntegrationTest {
     }
 
     @Test
-    void marksAsFailedWithoutRetryWhenErpRejectsInvoice() throws IOException {
+    void marksAsFailedWithoutRetryWhenErpRejectsInvoice(CapturedOutput output) throws IOException {
         String invoiceNumber = uniqueInvoiceNumber();
         erp.stubFor(erpCall(invoiceNumber).willReturn(aResponse().withStatus(400).withBody("Unknown buyer")));
 
@@ -165,6 +169,22 @@ class ErpDeliveryIntegrationTest {
         awaitStatus(id, InvoiceStatus.DELIVERY_FAILED);
         erp.verify(1, erpRequest(invoiceNumber));
         assertThat(keysInDeadLetterTopic()).contains(id.toString());
+        assertThat(output.getAll()).contains("ERP rejected invoice " + id + " with 400 BAD_REQUEST: Unknown buyer");
+    }
+
+    @Test
+    void logsOnlyStartOfLongRejection(CapturedOutput output) throws IOException {
+        String invoiceNumber = uniqueInvoiceNumber();
+        String rejection = "Invoice " + invoiceNumber + " rejected: " + "x".repeat(1_000) + "END-OF-REJECTION";
+        erp.stubFor(erpCall(invoiceNumber).willReturn(aResponse().withStatus(400).withBody(rejection)));
+
+        UUID id = uploadValidInvoice(invoiceNumber);
+
+        awaitStatus(id, InvoiceStatus.DELIVERY_FAILED);
+        erp.verify(1, erpRequest(invoiceNumber));
+        assertThat(output.getAll())
+                .contains("with 400 BAD_REQUEST: " + rejection.substring(0, 500) + " [cut]")
+                .doesNotContain("END-OF-REJECTION");
     }
 
     @Test
