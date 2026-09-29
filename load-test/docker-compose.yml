@@ -1,0 +1,79 @@
+# Override for docker-compose.yml, started by run.sh. Paths are relative to the repository root.
+# The limits keep the numbers comparable between runs and machines. The Docker VM needs at least 4 CPUs and 6 GB.
+services:
+  invoice-hub:
+    build:
+      context: .
+      dockerfile: invoice-hub/Dockerfile
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/invoicehub
+      DB_PASSWORD: invoicehub
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # k6 gets its tokens from the same URL, otherwise the issuer in the token doesn't match.
+      OAUTH2_ISSUER_URI: http://keycloak:8080/realms/invoice-hub
+      ERP_BASE_URL: http://erp-simulator:8081
+      MAIL_HOST: greenmail
+      MAIL_PASSWORD: invoices
+      SFTP_HOST: sftp
+      SFTP_PORT: 22
+      SFTP_PRIVATE_KEY: file:/config/sftp/invoice-hub_ecdsa
+      SFTP_KNOWN_HOSTS: file:/config/sftp/known_hosts
+      OTLP_ENDPOINT: http://lgtm:4318
+      # Default is 25% of the container memory, too little for KoSIT and Saxon. The rest is needed for metaspace
+      # and the stacks of up to 200 request threads.
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
+    volumes:
+      - ./docker/sftp:/config/sftp:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/actuator/health > /dev/null"]
+      interval: 5s
+      start_period: 60s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1536M
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  kafka:
+    environment:
+      # Default is 1 GB, the same as the limit. The broker also needs memory outside the heap and page cache.
+      KAFKA_HEAP_OPTS: -Xmx512M -Xms512M
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  erp-simulator:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  k6:
+    image: grafana/k6:2.3.0
+    # Only started by run.sh with "docker compose run".
+    profiles: [load-test]
+    environment:
+      HUB_URL: http://invoice-hub:8080
+      TOKEN_URL: http://keycloak:8080/realms/invoice-hub/protocol/openid-connect/token
+    volumes:
+      - ./load-test:/load-test
+      - ./invoice-hub/src/test/resources/samples:/samples:ro
+    working_dir: /load-test

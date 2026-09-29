@@ -41,3 +41,6 @@ build/
 
 ### Agents ###
 .agents/
+
+### Load test ###
+load-test/results/
