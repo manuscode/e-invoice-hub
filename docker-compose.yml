@@ -70,6 +70,18 @@ services:
     ports:
       - "2222:22"
 
+  # Demo realm with the clients demo-uploader and demo-reader. Only for local use, fixed secrets and admin/admin.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    volumes:
+      - ./docker/keycloak/invoice-hub-realm.json:/opt/keycloak/data/import/invoice-hub-realm.json:ro
+    ports:
+      - "8180:8080"
+
   # Grafana with Loki, Tempo and Prometheus behind one OpenTelemetry collector. Only for local use, no login.
   lgtm:
     image: grafana/otel-lgtm:0.34.0

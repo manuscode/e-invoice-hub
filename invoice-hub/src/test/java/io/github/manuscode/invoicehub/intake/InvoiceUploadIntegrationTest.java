@@ -1,5 +1,7 @@
 package io.github.manuscode.invoicehub.intake;
 
+import static io.github.manuscode.invoicehub.AccessTokens.reader;
+import static io.github.manuscode.invoicehub.AccessTokens.uploader;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jayway.jsonpath.JsonPath;
@@ -58,7 +60,7 @@ class InvoiceUploadIntegrationTest {
         assertThat(upload).hasStatus(HttpStatus.CREATED);
         assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("REJECTED");
         assertThat(upload).bodyJson().extractingPath("$.rejectionReason").isEqualTo("VALIDATION_FAILED");
-        assertThat(mockMvc.get().uri("/api/invoices/{id}/report", invoiceId(upload)))
+        assertThat(mockMvc.get().uri("/api/invoices/{id}/report", invoiceId(upload)).with(reader()))
                 .hasStatusOk()
                 .bodyText().contains("BR-DE-15");
     }
@@ -78,7 +80,7 @@ class InvoiceUploadIntegrationTest {
 
         assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("REJECTED");
         assertThat(upload).bodyJson().extractingPath("$.rejectionReason").isEqualTo("VALIDATION_FAILED");
-        assertThat(mockMvc.get().uri("/api/invoices/{id}/report", invoiceId(upload)))
+        assertThat(mockMvc.get().uri("/api/invoices/{id}/report", invoiceId(upload)).with(reader()))
                 .hasStatusOk()
                 .bodyText().contains("BR-DE-15");
     }
@@ -121,18 +123,35 @@ class InvoiceUploadIntegrationTest {
     }
 
     @Test
-    void rejectsTextFileAsUnsupportedFormat() {
-        MvcTestResult upload = upload(new MockMultipartFile("file", "invoice.txt", "text/plain",
+    void refusesFileThatIsNeitherXmlNorPdf() {
+        MvcTestResult upload = upload(new MockMultipartFile("file", "invoice.txt", MediaType.TEXT_PLAIN_VALUE,
                 "Invoice 4711, total 100 EUR".getBytes()));
 
-        assertThat(upload).bodyJson().extractingPath("$.rejectionReason").isEqualTo("UNSUPPORTED_FORMAT");
+        assertThat(upload).hasStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    @Test
+    void refusesFileWithoutContentType() throws IOException {
+        MvcTestResult upload = upload(new MockMultipartFile("file", "invoice.xml", null,
+                sample("xrechnung-ubl-valid.xml").getBytes()));
+
+        assertThat(upload).hasStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    @Test
+    void acceptsXmlContentTypeWithCharset() throws IOException {
+        MvcTestResult upload = upload(new MockMultipartFile("file", "invoice.xml", "text/xml; charset=UTF-8",
+                sample("xrechnung-ubl-valid.xml").getBytes()));
+
+        assertThat(upload).hasStatus(HttpStatus.CREATED);
+        assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("VALID");
     }
 
     @Test
     void storesInvoiceForLaterRequests() throws IOException {
         MvcTestResult upload = upload(sample("xrechnung-ubl-valid.xml"));
 
-        assertThat(mockMvc.get().uri("/api/invoices/{id}", invoiceId(upload)))
+        assertThat(mockMvc.get().uri("/api/invoices/{id}", invoiceId(upload)).with(reader()))
                 .hasStatusOk()
                 .bodyJson().extractingPath("$.status").isEqualTo("VALID");
     }
@@ -168,8 +187,10 @@ class InvoiceUploadIntegrationTest {
 
     @Test
     void returnsNotFoundForUnknownInvoice() {
-        assertThat(mockMvc.get().uri("/api/invoices/{id}", UUID.randomUUID())).hasStatus(HttpStatus.NOT_FOUND);
-        assertThat(mockMvc.get().uri("/api/invoices/{id}/report", UUID.randomUUID())).hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(mockMvc.get().uri("/api/invoices/{id}", UUID.randomUUID()).with(reader()))
+                .hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(mockMvc.get().uri("/api/invoices/{id}/report", UUID.randomUUID()).with(reader()))
+                .hasStatus(HttpStatus.NOT_FOUND);
     }
 
     private double receivedCount(String format, String status) {
@@ -178,7 +199,7 @@ class InvoiceUploadIntegrationTest {
     }
 
     private MvcTestResult upload(MockMultipartFile file) {
-        return mockMvc.post().uri("/api/invoices").multipart().file(file).exchange();
+        return mockMvc.post().uri("/api/invoices").with(uploader()).multipart().file(file).exchange();
     }
 
     private static MockMultipartFile sample(String name) throws IOException {

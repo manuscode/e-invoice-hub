@@ -1,0 +1,5 @@
+# Secrets of the local stack from docker-compose.yml. Only for local use, other environments set them as
+# environment variables.
+DB_PASSWORD: invoicehub
+MAIL_PASSWORD: invoices
+SFTP_PRIVATE_KEY: file:../docker/sftp/invoice-hub_ecdsa

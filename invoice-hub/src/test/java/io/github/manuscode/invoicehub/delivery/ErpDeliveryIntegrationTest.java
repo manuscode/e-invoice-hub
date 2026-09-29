@@ -7,6 +7,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static io.github.manuscode.invoicehub.AccessTokens.uploader;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -298,7 +299,7 @@ class ErpDeliveryIntegrationTest {
     }
 
     private UUID upload(MockMultipartFile file) throws IOException {
-        String response = mockMvc.post().uri("/api/invoices").multipart().file(file).exchange()
+        String response = mockMvc.post().uri("/api/invoices").with(uploader()).multipart().file(file).exchange()
                 .getResponse().getContentAsString();
         return UUID.fromString(JsonPath.read(response, "$.id"));
     }

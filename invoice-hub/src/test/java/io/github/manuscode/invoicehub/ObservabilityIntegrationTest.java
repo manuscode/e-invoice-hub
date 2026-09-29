@@ -6,6 +6,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static io.github.manuscode.invoicehub.AccessTokens.uploader;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -132,7 +133,7 @@ class ObservabilityIntegrationTest {
                 .replace("<cbc:ID>123456XX</cbc:ID>", "<cbc:ID>" + invoiceNumber + "</cbc:ID>");
         MockMultipartFile file = new MockMultipartFile("file", invoiceNumber + ".xml", MediaType.APPLICATION_XML_VALUE,
                 xml.getBytes(StandardCharsets.UTF_8));
-        String response = mockMvc.post().uri("/api/invoices").multipart().file(file).exchange()
+        String response = mockMvc.post().uri("/api/invoices").with(uploader()).multipart().file(file).exchange()
                 .getResponse().getContentAsString();
         return JsonPath.read(response, "$.id");
     }

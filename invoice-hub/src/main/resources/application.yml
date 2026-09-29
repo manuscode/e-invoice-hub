@@ -4,7 +4,8 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/invoicehub}
     username: ${DB_USER:invoicehub}
-    password: ${DB_PASSWORD:invoicehub}
+    # Secrets have no default here. For the local stack they are set in application-local.yml.
+    password: ${DB_PASSWORD}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     # Values are JSON, converted by the Jackson message converter of Spring Modulith.
@@ -22,6 +23,20 @@ spring:
     events:
       # Events that were saved but not sent to Kafka before a shutdown are sent after the restart.
       republish-outstanding-events-on-restart: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OAUTH2_ISSUER_URI:http://localhost:8180/realms/invoice-hub}
+          # Only tokens that Keycloak issued for the hub, not for other applications of the realm.
+          audiences: invoice-hub
+          authorities-claim-expressions: "[realm_access][roles]"
+          authority-prefix: ROLE_
+  servlet:
+    multipart:
+      # Invoices are mostly smaller than 1 MB, ZUGFeRD PDFs with images can have a few MB.
+      max-file-size: 10MB
+      max-request-size: 10MB
 
 management:
   opentelemetry:
@@ -59,7 +74,7 @@ invoice-hub:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:3143}
     username: ${MAIL_USER:invoices}
-    password: ${MAIL_PASSWORD:invoices}
+    password: ${MAIL_PASSWORD}
     inbox-folder: INBOX
     processed-folder: processed
     unprocessed-folder: unprocessed
@@ -69,8 +84,8 @@ invoice-hub:
     host: ${SFTP_HOST:localhost}
     port: ${SFTP_PORT:2222}
     username: ${SFTP_USER:invoices}
+    private-key: ${SFTP_PRIVATE_KEY}
     # For the SFTP server from docker-compose.yml. Relative to invoice-hub, the working directory of spring-boot:run.
-    private-key: ${SFTP_PRIVATE_KEY:file:../docker/sftp/invoice-hub_ecdsa}
     known-hosts: ${SFTP_KNOWN_HOSTS:file:../docker/sftp/known_hosts}
     inbox-directory: /inbox
     processed-directory: /processed

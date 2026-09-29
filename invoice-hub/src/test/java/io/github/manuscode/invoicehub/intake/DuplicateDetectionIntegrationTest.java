@@ -1,5 +1,7 @@
 package io.github.manuscode.invoicehub.intake;
 
+import static io.github.manuscode.invoicehub.AccessTokens.reader;
+import static io.github.manuscode.invoicehub.AccessTokens.uploader;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jayway.jsonpath.JsonPath;
@@ -76,7 +78,7 @@ class DuplicateDetectionIntegrationTest {
         assertThat(cii).bodyJson().extractingPath("$.duplicateOf").isEqualTo(original);
         assertThat(zugferd).bodyJson().extractingPath("$.status").isEqualTo("DUPLICATE");
         assertThat(zugferd).bodyJson().extractingPath("$.duplicateOf").isEqualTo(original);
-        assertThat(mockMvc.get().uri("/api/invoices/{id}", invoiceId(cii)))
+        assertThat(mockMvc.get().uri("/api/invoices/{id}", invoiceId(cii)).with(reader()))
                 .bodyJson().extractingPath("$.duplicateOf").isEqualTo(original);
     }
 
@@ -135,7 +137,7 @@ class DuplicateDetectionIntegrationTest {
     void showsMainDataOfInvoice() throws IOException {
         String id = invoiceId(upload(sample("zugferd-en16931.pdf")));
 
-        var invoice = assertThat(mockMvc.get().uri("/api/invoices/{id}", id)).hasStatusOk().bodyJson();
+        var invoice = assertThat(mockMvc.get().uri("/api/invoices/{id}", id).with(reader())).hasStatusOk().bodyJson();
         invoice.extractingPath("$.data.invoiceNumber").isEqualTo("123456XX");
         invoice.extractingPath("$.data.issueDate").isEqualTo("2016-04-04");
         invoice.extractingPath("$.data.seller.name").isEqualTo("[Seller name]");
@@ -176,7 +178,7 @@ class DuplicateDetectionIntegrationTest {
     }
 
     private MvcTestResult upload(MockMultipartFile file) {
-        return mockMvc.post().uri("/api/invoices").multipart().file(file).exchange();
+        return mockMvc.post().uri("/api/invoices").with(uploader()).multipart().file(file).exchange();
     }
 
     private long invoiceCount() {
