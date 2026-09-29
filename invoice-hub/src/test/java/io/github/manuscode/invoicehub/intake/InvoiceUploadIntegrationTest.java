@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jayway.jsonpath.JsonPath;
 import io.github.manuscode.invoicehub.TestcontainersConfiguration;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.UUID;
@@ -31,6 +32,9 @@ class InvoiceUploadIntegrationTest {
 
     @Autowired
     private JdbcClient jdbcClient;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     // The valid samples are the same invoice, without cleanup later uploads would be duplicates.
     @BeforeEach
@@ -134,6 +138,28 @@ class InvoiceUploadIntegrationTest {
     }
 
     @Test
+    void countsReceivedInvoicesByChannelFormatAndStatus() throws IOException {
+        double validBefore = receivedCount("XRECHNUNG_UBL", "VALID");
+        double rejectedBefore = receivedCount("UNKNOWN", "REJECTED");
+
+        upload(sample("xrechnung-ubl-valid.xml"));
+        upload(sample("pdf-without-invoice.pdf"));
+
+        assertThat(receivedCount("XRECHNUNG_UBL", "VALID")).isEqualTo(validBefore + 1);
+        assertThat(receivedCount("UNKNOWN", "REJECTED")).isEqualTo(rejectedBefore + 1);
+    }
+
+    @Test
+    void doesNotCountSameDocumentTwice() throws IOException {
+        upload(sample("xrechnung-ubl-valid.xml"));
+        double countAfterFirstUpload = receivedCount("XRECHNUNG_UBL", "VALID");
+
+        upload(sample("xrechnung-ubl-valid.xml"));
+
+        assertThat(receivedCount("XRECHNUNG_UBL", "VALID")).isEqualTo(countAfterFirstUpload);
+    }
+
+    @Test
     void rejectsEmptyFile() {
         MvcTestResult upload = upload(new MockMultipartFile("file", "empty.xml", "application/xml", new byte[0]));
 
@@ -144,6 +170,11 @@ class InvoiceUploadIntegrationTest {
     void returnsNotFoundForUnknownInvoice() {
         assertThat(mockMvc.get().uri("/api/invoices/{id}", UUID.randomUUID())).hasStatus(HttpStatus.NOT_FOUND);
         assertThat(mockMvc.get().uri("/api/invoices/{id}/report", UUID.randomUUID())).hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    private double receivedCount(String format, String status) {
+        return meterRegistry.counter("invoicehub.invoices.received",
+                "channel", "REST", "format", format, "status", status).count();
     }
 
     private MvcTestResult upload(MockMultipartFile file) {

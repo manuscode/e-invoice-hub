@@ -1,0 +1,10 @@
+# There is no OpenTelemetry collector in tests.
+management:
+  logging:
+    export:
+      otlp:
+        enabled: false
+  tracing:
+    export:
+      otlp:
+        enabled: false

@@ -13,10 +13,36 @@ spring:
     consumer:
       auto-offset-reset: earliest
       value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+    # Carries the trace context from the upload over Kafka to the ERP call.
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
   modulith:
     events:
       # Events that were saved but not sent to Kafka before a shutdown are sent after the restart.
       republish-outstanding-events-on-restart: true
+
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+    logging:
+      export:
+        otlp:
+          endpoint: ${OTLP_ENDPOINT:http://localhost:4318}/v1/logs
+  otlp:
+    metrics:
+      export:
+        url: ${OTLP_ENDPOINT:http://localhost:4318}/v1/metrics
+        # Default is 1m, too slow to watch the dashboard during a demo.
+        step: 10s
+  tracing:
+    sampling:
+      # Default is 10%. Every invoice must be traceable.
+      probability: 1.0
 
 logging:
   level:

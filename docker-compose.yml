@@ -41,6 +41,7 @@ services:
     environment:
       ERP_LATENCY: 200ms
       ERP_FAILURE_RATE: 0.1
+      OTLP_ENDPOINT: http://lgtm:4318
     ports:
       - "8081:8081"
 
@@ -68,6 +69,17 @@ services:
       - ./docker/sftp/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key
     ports:
       - "2222:22"
+
+  # Grafana with Loki, Tempo and Prometheus behind one OpenTelemetry collector. Only for local use, no login.
+  lgtm:
+    image: grafana/otel-lgtm:0.34.0
+    volumes:
+      - ./docker/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/invoice-hub.yaml:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards/invoice-hub:ro
+    ports:
+      - "3000:3000"
+      - "4317:4317"
+      - "4318:4318"
 
 volumes:
   postgres-data:

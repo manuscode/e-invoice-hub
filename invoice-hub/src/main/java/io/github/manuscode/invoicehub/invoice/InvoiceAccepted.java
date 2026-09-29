@@ -1,5 +1,6 @@
 package io.github.manuscode.invoicehub.invoice;
 
+import java.time.Instant;
 import java.util.UUID;
 import org.springframework.modulith.events.Externalized;
 
@@ -8,7 +9,7 @@ import org.springframework.modulith.events.Externalized;
  * read the invoice again.
  */
 @Externalized(InvoiceAccepted.TOPIC + "::#{invoiceId()}")
-public record InvoiceAccepted(UUID invoiceId, InvoiceData data) {
+public record InvoiceAccepted(UUID invoiceId, Instant receivedAt, InvoiceData data) {
 
     public static final String TOPIC = "invoice-accepted";
 }

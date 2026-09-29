@@ -94,7 +94,7 @@ public class InvoiceService {
     private void accept(Invoice invoice, BusinessKey key, String report) {
         transaction.executeWithoutResult(status -> {
             repository.updateValidation(invoice, key, report);
-            events.publishEvent(new InvoiceAccepted(invoice.id(), invoice.data()));
+            events.publishEvent(new InvoiceAccepted(invoice.id(), invoice.receivedAt(), invoice.data()));
         });
     }
 

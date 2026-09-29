@@ -5,6 +5,27 @@ spring:
 server:
   port: 8081
 
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+    logging:
+      export:
+        otlp:
+          endpoint: ${OTLP_ENDPOINT:http://localhost:4318}/v1/logs
+  otlp:
+    metrics:
+      export:
+        url: ${OTLP_ENDPOINT:http://localhost:4318}/v1/metrics
+        # Default is 1m, too slow to watch the dashboard during a demo.
+        step: 10s
+  tracing:
+    sampling:
+      # Default is 10%. Every invoice must be traceable.
+      probability: 1.0
+
 erp-simulator:
   latency: ${ERP_LATENCY:0ms}
   failure-rate: ${ERP_FAILURE_RATE:0.0}

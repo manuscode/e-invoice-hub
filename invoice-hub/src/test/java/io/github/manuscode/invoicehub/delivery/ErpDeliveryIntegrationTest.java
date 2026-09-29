@@ -19,6 +19,7 @@ import com.jayway.jsonpath.JsonPath;
 import io.github.manuscode.invoicehub.TestcontainersConfiguration;
 import io.github.manuscode.invoicehub.invoice.InvoiceService;
 import io.github.manuscode.invoicehub.invoice.InvoiceStatus;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -84,6 +85,9 @@ class ErpDeliveryIntegrationTest {
     @Autowired
     private IncompleteEventPublications incompleteEventPublications;
 
+    @Autowired
+    private MeterRegistry meterRegistry;
+
     @Test
     void deliversValidInvoice() throws IOException {
         String invoiceNumber = uniqueInvoiceNumber();
@@ -95,6 +99,35 @@ class ErpDeliveryIntegrationTest {
         erp.verify(1, erpRequest(invoiceNumber)
                 .withRequestBody(matchingJsonPath("$.invoiceId", equalTo(id.toString())))
                 .withRequestBody(matchingJsonPath("$.invoice.seller.vatId", equalTo("DE 123456789"))));
+    }
+
+    @Test
+    void measuresDeliveryDuration() throws IOException {
+        String invoiceNumber = uniqueInvoiceNumber();
+        erp.stubFor(erpCall(invoiceNumber).willReturn(aResponse().withStatus(201)));
+        long deliveredBefore = meterRegistry.timer("invoicehub.invoices.delivery.duration").count();
+
+        UUID id = uploadValidInvoice(invoiceNumber);
+
+        awaitStatus(id, InvoiceStatus.DELIVERED);
+        // Delivered events of other tests may be counted meanwhile.
+        await().atMost(DELIVERY_TIMEOUT).untilAsserted(() ->
+                assertThat(meterRegistry.timer("invoicehub.invoices.delivery.duration").count())
+                        .isGreaterThan(deliveredBefore));
+    }
+
+    @Test
+    void countsInvoicesInDeadLetterTopic() throws IOException {
+        String invoiceNumber = uniqueInvoiceNumber();
+        erp.stubFor(erpCall(invoiceNumber).willReturn(aResponse().withStatus(400)));
+        double deadLetteredBefore = meterRegistry.counter("invoicehub.invoices.dead.lettered").count();
+
+        UUID id = uploadValidInvoice(invoiceNumber);
+
+        awaitStatus(id, InvoiceStatus.DELIVERY_FAILED);
+        await().atMost(DELIVERY_TIMEOUT).untilAsserted(() ->
+                assertThat(meterRegistry.counter("invoicehub.invoices.dead.lettered").count())
+                        .isGreaterThan(deadLetteredBefore));
     }
 
     @Test

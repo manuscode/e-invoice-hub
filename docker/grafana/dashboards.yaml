@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: invoice-hub
+    folder: Invoice Hub
+    type: file
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards/invoice-hub
