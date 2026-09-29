@@ -5,9 +5,12 @@
 A service that receives e-invoices over REST, mail and SFTP, validates them with the official KoSIT rules and delivers
 them reliably to the ERP. Small scope, but built like a production system.
 
+**Tech stack:** Java 25 · Spring Boot 4 · Spring Modulith · Kafka · Postgres · Keycloak · KoSIT Validator ·
+Mustang · OpenTelemetry · Grafana · Testcontainers · k6
+
 ## Problem
 
-Since 01.01.2025 all companies in Germany must be able to receive e-invoices (XRechnung, ZUGFeRD).
+Since 1 January 2025 all companies in Germany must be able to receive e-invoices (XRechnung, ZUGFeRD).
 In many companies it still looks like this:
 
 - Invoices come by mail, as PDF, XML or both.
@@ -33,7 +36,7 @@ Invoice status:
 ```mermaid
 stateDiagram-v2
     [*] --> RECEIVED
-    RECEIVED --> REJECTED: KoSIT check failed or unknown format
+    RECEIVED --> REJECTED: KoSIT check failed, unknown format or profile
     RECEIVED --> DUPLICATE: same seller VAT ID + invoice number
     RECEIVED --> VALID
     VALID --> DELIVERED: ERP accepted
@@ -42,26 +45,30 @@ stateDiagram-v2
 
 ## Architecture
 
-Arrows show how invoices and data flow, not code dependencies.
+Arrows show how invoices and data flow.
 
 ```mermaid
 flowchart TB
     supplier([Supplier / portal])
-    mailbox[(IMAP mailbox<br/>GreenMail)]
+    mailbox[(IMAP mailbox)]
     sftp[(SFTP server)]
-    keycloak[Keycloak]
+    keycloak[Keycloak<br/>access tokens]
 
     subgraph hub [invoice-hub]
         direction LR
+        intake[intake<br/>receives from all channels]
+        validation[validation<br/>detects format, KoSIT check]
+        invoice[invoice<br/>maps, detects duplicates]
+        delivery[delivery<br/>sends to ERP, retries]
         intake -- raw document --> validation
         validation -- checked invoice --> invoice
-        delivery -- delivered / failed --> invoice
+        delivery -- status DELIVERED /<br/>DELIVERY_FAILED --> invoice
     end
 
-    postgres[(Postgres<br/>invoices, raw documents,<br/>event publication)]
+    postgres[(Postgres<br/>invoices, raw documents,<br/>event publication as outbox)]
     kafka[[Kafka<br/>invoice-accepted,<br/>retry and DLT topics]]
-    erp[ERP simulator]
-    lgtm[Grafana, Loki, Tempo,<br/>Prometheus]
+    erp[ERP<br/>simulated]
+    lgtm[Grafana<br/>metrics, logs, traces]
 
     supplier -- upload via REST --> intake
     supplier -- mail --> mailbox
@@ -69,15 +76,33 @@ flowchart TB
     mailbox -- polled attachments --> intake
     sftp -- polled files --> intake
     supplier -- client credentials --> keycloak
-    keycloak -- signing keys --> hub
+    keycloak -- signing keys<br/>to check tokens --> intake
     invoice -- invoice, status and<br/>InvoiceAccepted in one transaction --> postgres
-    postgres -- InvoiceAccepted --> kafka
+    invoice -- InvoiceAccepted<br/>after commit --> kafka
     kafka -- InvoiceAccepted --> delivery
     delivery -- failed attempts --> kafka
     delivery -- invoice data via REST --> erp
     hub -- metrics, logs, traces --> lgtm
     erp -- metrics, logs, traces --> lgtm
+    %% Invisible link, keeps Postgres above Kafka and the diagram narrow.
+    postgres ~~~ kafka
+
+    %% Transparent fills and the text color of the theme, so the diagram fits light and dark themes.
+    classDef channel fill:#2563eb26,stroke:#2563eb
+    classDef module fill:#16a34a33,stroke:#16a34a,stroke-width:2px
+    classDef storage fill:#d9770633,stroke:#d97706
+    classDef target fill:#7c3aed33,stroke:#7c3aed,stroke-width:2px
+    classDef platform fill:#64748b26,stroke:#64748b
+    class supplier,mailbox,sftp channel
+    class intake,validation,invoice,delivery module
+    class postgres,kafka storage
+    class erp target
+    class keycloak,lgtm platform
+    style hub fill:#16a34a0d,stroke:#16a34a,stroke-width:2px
 ```
+
+Blue: input channels · Green: the hub and its modules · Amber: storage and messaging · Purple: target system ·
+Gray: security and operations
 
 - **One Spring Boot service** (Java 25, Spring Boot 4) with four modules. The code dependencies go
   `intake` → `validation` → `invoice` ← `delivery`, `invoice` doesn't know who consumes its events.
@@ -107,14 +132,14 @@ ZUGFeRD profiles MINIMUM and BASIC WL are rejected on purpose. They don't count 
   [demo walkthrough](#demo-walkthrough).
 - **No invoice lost:** in the load test 4953 documents were sent and 4953 invoices were in the database, each with the
   expected status. `load-test/run.sh` checks this on every run.
-- **Load:** 5.8 requests/s steady with p95 136 ms and p99 191 ms, limit at about 17 requests/s. Measured on a laptop
-  that was swapping, so a lower bound. Details, bottlenecks and next steps in [docs/load-test.md](docs/load-test.md).
+- **Load:** 5.8 requests/s steady with p95 136 ms and p99 191 ms, the limit is at about 17 requests/s. Measured on a
+  laptop that was swapping, so a lower bound. Details, bottlenecks and next steps in [docs/load-test.md](docs/load-test.md).
 - **Bottlenecks found:** KoSIT validation is serialized by a lock in Saxon, and delivery with one consumer can't keep up
-  with a slow ERP after a peak. Both are documented with the fix.
+  with a slow ERP after a peak. Both are documented with the proposed fix.
 - **Security:** only JWTs from Keycloak with the right role, no invoice content or IBAN in the logs, upload size and
   content type limited.
 - **Tests:** unit and integration tests against real Postgres, Kafka, Keycloak, GreenMail and SFTP (Testcontainers),
-  plus the module structure test. They run in CI on every push.
+  plus the module structure test. They run in CI on every push to `main` and every pull request.
 
 ## Run it locally
 
@@ -182,26 +207,28 @@ What to look at:
    ```bash
    READER_TOKEN=$(curl -s http://localhost:8180/realms/invoice-hub/protocol/openid-connect/token \
      -d grant_type=client_credentials -d client_id=demo-reader -d client_secret=demo-reader-secret | jq -r .access_token)
-   curl -s http://localhost:8080/api/invoices/<id of 05>/report -H "Authorization: Bearer $READER_TOKEN" > report.html
-   open report.html
+   curl -s http://localhost:8080/api/invoices/<id of 05>/report -H "Authorization: Bearer $READER_TOKEN" > /tmp/report.html
+   open /tmp/report.html
    ```
+
+   `open` is for macOS, on Linux use `xdg-open`.
 
 2. **ERP simulator:** http://localhost:8081/erp/invoices lists the five delivered invoices (01, 02, 03, 09, 10) as JSON,
    mapped to the internal model. Duplicates and rejected invoices never reach the ERP.
 3. **Grafana dashboard "Invoice Hub":** received 10, by channel REST 8, mail 1, SFTP 1, by status 5 valid,
-   4 rejected, 1 duplicate, 5 delivered. The simulator answers 10% of the calls with `503`, these show up as retries
-   in "ERP responses per minute". Metrics are exported every 10 seconds.
+   4 rejected, 1 duplicate, 5 delivered. The simulator answers 10% of the calls with `503`, these show up in
+   "ERP responses per minute" and are retried by the hub. Metrics are exported every 10 seconds.
 4. **One invoice from upload to ERP:** enter the id of sample 01 in the field "Invoice id" at the top of the
-   dashboard. The panel "Traces" shows the trace `http post /api/invoices`, click on it: Tempo shows the upload, the
-   KoSIT check, Kafka and the call to the ERP as one trace. The panel "Logs" shows the logs of this invoice from the
-   hub and the ERP simulator.
+   dashboard. The panel "Traces" shows the trace `http post /api/invoices`, click on it: Tempo shows the upload with
+   the validation, Kafka and the call to the ERP simulator as one trace. The panel "Logs" shows the logs of the hub for
+   this invoice.
 5. **ERP down:** stop the simulator with `docker compose stop erp-simulator` and upload a new invoice, e.g.
-   sample 01 with another invoice number:
+   sample 01 with another invoice number (`TOKEN` from [Run it locally](#run-it-locally)):
 
    ```bash
-   sed 's/2026-0001/2026-0011/' samples/rest/01-xrechnung-ubl-valid.xml > 2026-0011.xml
+   sed 's/2026-0001/2026-0011/' samples/rest/01-xrechnung-ubl-valid.xml > /tmp/2026-0011.xml
    curl -s http://localhost:8080/api/invoices -H "Authorization: Bearer $TOKEN" \
-     -F "file=@2026-0011.xml;type=application/xml" | jq
+     -F "file=@/tmp/2026-0011.xml;type=application/xml" | jq
    ```
 
    The upload still returns `201 VALID` at once. The hub retries after 10, 30 and 90 seconds, then the invoice goes to
@@ -224,6 +251,8 @@ docker compose up --detach --wait --scale invoice-hub=0
 ```
 
 Load test with k6: `./load-test/run.sh`, see [docs/load-test.md](docs/load-test.md).
+
+Project structure:
 
 ```text
 invoice-hub/     the service, modules intake, validation, invoice, delivery
