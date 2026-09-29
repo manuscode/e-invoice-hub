@@ -9,6 +9,7 @@ import io.github.manuscode.invoicehub.TestcontainersConfiguration;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,6 +64,29 @@ class InvoiceUploadIntegrationTest {
         assertThat(mockMvc.get().uri("/api/invoices/{id}/report", invoiceId(upload)).with(reader()))
                 .hasStatusOk()
                 .bodyText().contains("BR-DE-15");
+    }
+
+    @Test
+    void servesReportWithoutScriptsOrExternalContent() throws IOException {
+        MvcTestResult upload = upload(sample("xrechnung-ubl-missing-buyer-reference.xml"));
+
+        assertThat(mockMvc.get().uri("/api/invoices/{id}/report", invoiceId(upload)).with(reader()))
+                .hasStatusOk()
+                .hasHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    }
+
+    @Test
+    void rejectsXRechnungThatIsNotWellFormedWithReport() throws IOException {
+        byte[] valid = sample("xrechnung-ubl-valid.xml").getBytes();
+        byte[] truncated = Arrays.copyOf(valid, valid.length / 2);
+
+        MvcTestResult upload = upload(new MockMultipartFile("file", "truncated.xml", "application/xml", truncated));
+
+        assertThat(upload).hasStatus(HttpStatus.CREATED);
+        assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("REJECTED");
+        assertThat(upload).bodyJson().extractingPath("$.rejectionReason").isEqualTo("VALIDATION_FAILED");
+        assertThat(mockMvc.get().uri("/api/invoices/{id}/report", invoiceId(upload)).with(reader()))
+                .hasStatusOk();
     }
 
     @Test
@@ -145,6 +169,17 @@ class InvoiceUploadIntegrationTest {
 
         assertThat(upload).hasStatus(HttpStatus.CREATED);
         assertThat(upload).bodyJson().extractingPath("$.status").isEqualTo("VALID");
+    }
+
+    @Test
+    void acceptsFilenameLongerThanDatabaseColumn() throws IOException {
+        String filename = "x".repeat(300) + ".xml";
+
+        MvcTestResult upload = upload(new MockMultipartFile("file", filename, MediaType.APPLICATION_XML_VALUE,
+                sample("xrechnung-ubl-valid.xml").getBytes()));
+
+        assertThat(upload).hasStatus(HttpStatus.CREATED);
+        assertThat(upload).bodyJson().extractingPath("$.filename").isEqualTo("x".repeat(255));
     }
 
     @Test

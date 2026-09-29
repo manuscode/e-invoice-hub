@@ -78,6 +78,8 @@ invoice-hub:
     inbox-folder: INBOX
     processed-folder: processed
     unprocessed-folder: unprocessed
+    # Same limit as for uploads via REST.
+    max-attachment-size: ${spring.servlet.multipart.max-file-size}
     poll-interval: 30s
     timeout: 10s
   sftp:
@@ -90,6 +92,8 @@ invoice-hub:
     inbox-directory: /inbox
     processed-directory: /processed
     failed-directory: /failed
+    # Same limit as for uploads via REST.
+    max-file-size: ${spring.servlet.multipart.max-file-size}
     # Files changed more recently may still be uploaded.
     min-file-age: 5s
     poll-interval: 30s

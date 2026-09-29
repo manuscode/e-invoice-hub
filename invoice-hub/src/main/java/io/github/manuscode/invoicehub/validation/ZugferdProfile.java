@@ -41,8 +41,9 @@ final class ZugferdProfile {
             } finally {
                 reader.close();
             }
-        } catch (XMLStreamException e) {
-            throw new IllegalArgumentException("CII is not well-formed XML", e);
+        } catch (XMLStreamException notWellFormed) {
+            // KoSIT rejects it with a report that names the syntax error.
+            return Optional.empty();
         }
     }
 

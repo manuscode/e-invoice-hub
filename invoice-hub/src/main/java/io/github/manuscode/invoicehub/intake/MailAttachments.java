@@ -10,18 +10,23 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.util.unit.DataSize;
 
 final class MailAttachments {
 
     private MailAttachments() {
     }
 
-    static List<RawDocument> invoiceDocuments(Part part) throws MessagingException, IOException {
+    /**
+     * @throws MessagingException if the mail is broken or an attachment is bigger than {@code maxAttachmentSize}
+     */
+    static List<RawDocument> invoiceDocuments(Part part, DataSize maxAttachmentSize)
+            throws MessagingException, IOException {
         if (part.isMimeType("multipart/*")) {
             Multipart multipart = (Multipart) part.getContent();
             List<RawDocument> documents = new ArrayList<>();
             for (int index = 0; index < multipart.getCount(); index++) {
-                documents.addAll(invoiceDocuments(multipart.getBodyPart(index)));
+                documents.addAll(invoiceDocuments(multipart.getBodyPart(index), maxAttachmentSize));
             }
             return List.copyOf(documents);
         }
@@ -34,8 +39,19 @@ final class MailAttachments {
             return List.of();
         }
         try (InputStream content = part.getInputStream()) {
-            return List.of(new RawDocument(filename, content.readAllBytes(), Channel.MAIL));
+            return List.of(new RawDocument(filename, limitedContent(content, filename, maxAttachmentSize), Channel.MAIL));
         }
+    }
+
+    // The size of a part is only known after decoding, so the limit is checked while reading.
+    private static byte[] limitedContent(InputStream content, String filename, DataSize maxAttachmentSize)
+            throws MessagingException, IOException {
+        int maxBytes = Math.toIntExact(maxAttachmentSize.toBytes());
+        byte[] bytes = content.readNBytes(maxBytes + 1);
+        if (bytes.length > maxBytes) {
+            throw new MessagingException("Attachment " + filename + " is bigger than " + maxBytes + " bytes");
+        }
+        return bytes;
     }
 
     // Mail clients often send XML as application/octet-stream, so the file extension counts as well.

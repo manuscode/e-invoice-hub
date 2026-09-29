@@ -3,6 +3,7 @@ package io.github.manuscode.invoicehub.intake;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.core.io.Resource;
+import org.springframework.util.unit.DataSize;
 
 @ConfigurationProperties("invoice-hub.sftp")
 record SftpIntakeProperties(
@@ -14,6 +15,7 @@ record SftpIntakeProperties(
         String inboxDirectory,
         String processedDirectory,
         String failedDirectory,
+        DataSize maxFileSize,
         Duration minFileAge,
         Duration pollInterval,
         Duration timeout) {

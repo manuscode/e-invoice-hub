@@ -15,7 +15,9 @@ import jakarta.mail.Transport;
 import jakarta.mail.internet.MimeMessage;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,11 +27,16 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.InputStreamSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mail.javamail.MimeMessageHelper;
 
-@SpringBootTest(properties = {"invoice-hub.mail.poll-interval=200ms", "invoice-hub.mail.timeout=2s"})
+@SpringBootTest(properties = {
+        "invoice-hub.mail.poll-interval=200ms",
+        "invoice-hub.mail.timeout=2s",
+        "invoice-hub.mail.max-attachment-size=100KB"})
 @Import(TestcontainersConfiguration.class)
 @ExtendWith(OutputCaptureExtension.class)
 class MailIntakeIntegrationTest {
@@ -81,6 +88,19 @@ class MailIntakeIntegrationTest {
     }
 
     @Test
+    void movesMailWithAttachmentBiggerThanLimitToUnprocessedAndGoesOn(CapturedOutput output) throws Exception {
+        send("Große Rechnung", new ByteArrayResource(new byte[200_000]), "big.pdf");
+        send("Rechnung danach", "xrechnung-ubl-valid.xml");
+
+        await().atMost(PROCESSING_TIMEOUT).untilAsserted(() ->
+                assertThat(subjectsIn("processed")).contains("Rechnung danach"));
+        assertThat(subjectsIn("unprocessed")).contains("Große Rechnung");
+        assertThat(invoices()).extracting(StoredInvoice::filename).containsExactly("xrechnung-ubl-valid.xml");
+        assertThat(output).contains("could not be read, moving it to folder 'unprocessed'")
+                .contains("Attachment big.pdf is bigger than 102400 bytes");
+    }
+
+    @Test
     void keepsPollingWhileMailboxIsUnreachable(CapturedOutput output) throws Exception {
         var docker = greenMail.getDockerClient();
         docker.pauseContainerCmd(greenMail.getContainerId()).exec();
@@ -99,17 +119,29 @@ class MailIntakeIntegrationTest {
     }
 
     private void send(String subject, String... sampleNames) throws MessagingException {
+        Map<String, InputStreamSource> attachments = new LinkedHashMap<>();
+        for (String sampleName : sampleNames) {
+            attachments.put(sampleName, new ClassPathResource("samples/" + sampleName));
+        }
+        send(subject, attachments);
+    }
+
+    private void send(String subject, InputStreamSource attachment, String filename) throws MessagingException {
+        send(subject, Map.of(filename, attachment));
+    }
+
+    private void send(String subject, Map<String, InputStreamSource> attachments) throws MessagingException {
         Properties smtp = new Properties();
         smtp.put("mail.smtp.host", greenMail.getHost());
         smtp.put("mail.smtp.port", String.valueOf(greenMail.smtpPort()));
         MimeMessage mail = new MimeMessage(Session.getInstance(smtp));
-        MimeMessageHelper helper = new MimeMessageHelper(mail, sampleNames.length > 0);
+        MimeMessageHelper helper = new MimeMessageHelper(mail, !attachments.isEmpty());
         helper.setFrom("buchhaltung@lieferant.example");
         helper.setTo(GreenMailContainer.ADDRESS);
         helper.setSubject(subject);
         helper.setText("Sehr geehrte Damen und Herren, anbei unsere Rechnung.");
-        for (String sampleName : sampleNames) {
-            helper.addAttachment(sampleName, new ClassPathResource("samples/" + sampleName));
+        for (Map.Entry<String, InputStreamSource> attachment : attachments.entrySet()) {
+            helper.addAttachment(attachment.getKey(), attachment.getValue());
         }
         Transport.send(mail);
     }

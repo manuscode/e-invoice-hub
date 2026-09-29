@@ -2,7 +2,6 @@ package io.github.manuscode.invoicehub.validation;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -45,8 +44,8 @@ class ZugferdProfileTest {
     }
 
     @Test
-    void failsForMalformedXml() {
-        assertThatIllegalArgumentException().isThrownBy(() -> ZugferdProfile.isEInvoice("<broken".getBytes(UTF_8)));
+    void leavesMalformedXmlToKosItValidation() {
+        assertThat(ZugferdProfile.isEInvoice("<broken".getBytes(UTF_8))).isTrue();
     }
 
     private static byte[] ciiWithGuideline(String guidelineId) {

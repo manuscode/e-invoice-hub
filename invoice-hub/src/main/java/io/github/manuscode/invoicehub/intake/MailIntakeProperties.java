@@ -3,6 +3,7 @@ package io.github.manuscode.invoicehub.intake;
 import jakarta.mail.URLName;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.unit.DataSize;
 
 @ConfigurationProperties("invoice-hub.mail")
 record MailIntakeProperties(
@@ -14,6 +15,7 @@ record MailIntakeProperties(
         String inboxFolder,
         String processedFolder,
         String unprocessedFolder,
+        DataSize maxAttachmentSize,
         Duration pollInterval,
         Duration timeout) {
 

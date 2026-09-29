@@ -6,6 +6,7 @@ import jakarta.mail.internet.MimeMessage;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import org.eclipse.angus.mail.imap.IMAPFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,7 +19,8 @@ import org.springframework.stereotype.Component;
 /**
  * Hands every XML or PDF attachment of a mail to the intake. Afterwards the mail is moved out of the inbox. If this
  * fails, the mail stays in the inbox and is processed again with the next poll. That is safe, because the intake
- * recognizes documents it received before.
+ * recognizes documents it received before. Mails without such attachment and mails that can't be read, e.g. broken
+ * or with an attachment that is too big, are moved to the unprocessed folder instead.
  */
 @Component
 class MailIntake implements MessageHandler {
@@ -43,19 +45,35 @@ class MailIntake implements MessageHandler {
         }
     }
 
-    private void receive(MimeMessage mail) throws MessagingException, IOException {
+    private void receive(MimeMessage mail) throws MessagingException {
         // Read before the move, afterwards the mail is no longer accessible in the inbox.
         String messageId = mail.getMessageID();
-        List<RawDocument> documents = MailAttachments.invoiceDocuments(mail);
+        Optional<List<RawDocument>> documents = read(mail, messageId);
         if (documents.isEmpty()) {
+            // Not readable, the reason is already logged.
+            moveTo(mail, properties.unprocessedFolder());
+            return;
+        }
+        if (documents.get().isEmpty()) {
             moveTo(mail, properties.unprocessedFolder());
             log.warn("Mail {} has no XML or PDF attachment, moved to folder '{}'",
                     messageId, properties.unprocessedFolder());
             return;
         }
-        documents.forEach(intakeService::receive);
+        documents.get().forEach(intakeService::receive);
         moveTo(mail, properties.processedFolder());
-        log.info("Received {} document(s) from mail {}", documents.size(), messageId);
+        log.info("Received {} document(s) from mail {}", documents.get().size(), messageId);
+    }
+
+    // A mail that can't be read would fail with every poll. It would also block all mails behind it, because every
+    // poll starts with the first mail of the inbox.
+    private Optional<List<RawDocument>> read(MimeMessage mail, String messageId) {
+        try {
+            return Optional.of(MailAttachments.invoiceDocuments(mail, properties.maxAttachmentSize()));
+        } catch (MessagingException | IOException e) {
+            log.error("Mail {} could not be read, moving it to folder '{}'", messageId, properties.unprocessedFolder(), e);
+            return Optional.empty();
+        }
     }
 
     private static void moveTo(MimeMessage mail, String folderName) throws MessagingException {

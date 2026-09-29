@@ -1,3 +1,5 @@
+# Ports are published on localhost only. The stack has fixed demo passwords and services without login, it must not be
+# reachable from the network.
 services:
   # For the hub from the IDE (spring-boot:run) start the stack without it: docker compose up -d --scale invoice-hub=0
   invoice-hub:
@@ -23,7 +25,7 @@ services:
     volumes:
       - ./docker/sftp:/config/sftp:ro
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,7 +46,7 @@ services:
       POSTGRES_USER: invoicehub
       POSTGRES_PASSWORD: invoicehub
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -68,7 +70,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null"]
       interval: 10s
@@ -83,7 +85,7 @@ services:
       ERP_FAILURE_RATE: 0.1
       OTLP_ENDPOINT: http://lgtm:4318
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
 
   greenmail:
     image: greenmail/standalone:2.1.13
@@ -95,8 +97,8 @@ services:
         -Dgreenmail.hostname=0.0.0.0
         -Dgreenmail.users=invoices:invoices@invoice-hub.local
     ports:
-      - "3025:3025"
-      - "3143:3143"
+      - "127.0.0.1:3025:3025"
+      - "127.0.0.1:3143:3143"
 
   sftp:
     image: atmoz/sftp:alpine@sha256:a81ea210713555be76075b4b2788a4addfaa54d137cd881f3a99ac539f0be2c5
@@ -106,9 +108,9 @@ services:
       - ./docker/sftp/invoice-hub_ecdsa.pub:/home/invoices/.ssh/keys/invoice-hub_ecdsa.pub:ro
       # Fixed host key, so docker/sftp/known_hosts stays valid when the container is recreated. Only RSA, because
       # the SSH client of invoice-hub (Apache MINA SSHD) can't read ed25519 keys without an additional provider.
-      - ./docker/sftp/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key
+      - ./docker/sftp/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key:ro
     ports:
-      - "2222:22"
+      - "127.0.0.1:2222:22"
 
   # Demo realm with the clients demo-uploader and demo-reader. Only for local use, fixed secrets and admin/admin.
   keycloak:
@@ -122,7 +124,7 @@ services:
     volumes:
       - ./docker/keycloak/invoice-hub-realm.json:/opt/keycloak/data/import/invoice-hub-realm.json:ro
     ports:
-      - "8180:8080"
+      - "127.0.0.1:8180:8080"
 
   # Grafana with Loki, Tempo and Prometheus behind one OpenTelemetry collector. Only for local use, no login.
   lgtm:
@@ -131,9 +133,9 @@ services:
       - ./docker/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/invoice-hub.yaml:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards/invoice-hub:ro
     ports:
-      - "3000:3000"
-      - "4317:4317"
-      - "4318:4318"
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
 
 volumes:
   postgres-data:

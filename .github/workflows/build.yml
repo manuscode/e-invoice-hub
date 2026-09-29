@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# The build only reads the repository. Code from pull requests gets no write access.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -136,8 +136,9 @@ ZUGFeRD profiles MINIMUM and BASIC WL are rejected on purpose. They don't count 
   laptop that was swapping, so a lower bound. Details, bottlenecks and next steps in [docs/load-test.md](docs/load-test.md).
 - **Bottlenecks found:** KoSIT validation is serialized by a lock in Saxon, and delivery with one consumer can't keep up
   with a slow ERP after a peak. Both are documented with the proposed fix.
-- **Security:** only JWTs from Keycloak with the right role, no invoice content or IBAN in the logs, upload size and
-  content type limited.
+- **Security:** only JWTs from Keycloak with the right role, no invoice content or IBAN in the logs, document size
+  limited on all channels, hardened XML parsing, validation report served with a strict Content Security Policy,
+  containers without root.
 - **Tests:** unit and integration tests against real Postgres, Kafka, Keycloak, GreenMail and SFTP (Testcontainers),
   plus the module structure test. They run in CI on every push to `main` and every pull request.
 
@@ -160,7 +161,8 @@ The first start takes a few minutes, Maven downloads the dependencies and the XR
 | ERP simulator | http://localhost:8081/erp/invoices | none |
 | Keycloak | http://localhost:8180 | `admin` / `admin` |
 
-All passwords, client secrets and keys in this repository are for the local demo only.
+All passwords, client secrets and keys in this repository are for the local demo only. That's why all ports are
+published on `localhost` only.
 
 Get a token and upload an invoice:
 

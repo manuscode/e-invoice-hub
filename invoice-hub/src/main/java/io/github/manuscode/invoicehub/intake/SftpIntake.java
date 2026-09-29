@@ -1,8 +1,8 @@
 package io.github.manuscode.invoicehub.intake;
 
 import io.github.manuscode.invoicehub.invoice.Channel;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -19,7 +19,8 @@ import org.springframework.stereotype.Component;
 /**
  * Hands a file of the inbox to the intake and moves it to the processed directory afterwards. If this fails, the file
  * stays in the inbox and is processed again with the next poll. That is safe, because the intake recognizes documents
- * it received before. Only files that can't be read are moved to the failed directory, they would fail every time.
+ * it received before. Only files that can't be read or are too big are moved to the failed directory, they would fail
+ * every time.
  */
 @Component
 class SftpIntake implements MessageHandler {
@@ -60,14 +61,28 @@ class SftpIntake implements MessageHandler {
     }
 
     private Optional<byte[]> read(Session<SftpClient.DirEntry> session, String filename) {
-        ByteArrayOutputStream content = new ByteArrayOutputStream();
+        int maxBytes = Math.toIntExact(properties.maxFileSize().toBytes());
         try {
-            session.read(inboxPath(filename), content);
-            return Optional.of(content.toByteArray());
+            byte[] content = readAtMost(session, inboxPath(filename), maxBytes + 1);
+            if (content.length > maxBytes) {
+                log.error("File {} is bigger than {} bytes, moving it to directory '{}'",
+                        filename, maxBytes, properties.failedDirectory());
+                return Optional.empty();
+            }
+            return Optional.of(content);
         } catch (IOException e) {
             log.error("File {} could not be read, moving it to directory '{}'",
                     filename, properties.failedDirectory(), e);
             return Optional.empty();
+        }
+    }
+
+    // Stops reading after the limit, so a huge file doesn't fill the memory.
+    private static byte[] readAtMost(Session<SftpClient.DirEntry> session, String path, int bytes) throws IOException {
+        try (InputStream content = session.readRaw(path)) {
+            return content.readNBytes(bytes);
+        } finally {
+            session.finalizeRaw();
         }
     }
 

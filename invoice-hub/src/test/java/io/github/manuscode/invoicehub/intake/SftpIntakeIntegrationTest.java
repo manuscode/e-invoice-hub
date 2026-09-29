@@ -21,7 +21,10 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.integration.sftp.session.SftpRemoteFileTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-@SpringBootTest(properties = {"invoice-hub.sftp.poll-interval=200ms", "invoice-hub.sftp.min-file-age=1s"})
+@SpringBootTest(properties = {
+        "invoice-hub.sftp.poll-interval=200ms",
+        "invoice-hub.sftp.min-file-age=1s",
+        "invoice-hub.sftp.max-file-size=100KB"})
 @Import(TestcontainersConfiguration.class)
 @ExtendWith(OutputCaptureExtension.class)
 class SftpIntakeIntegrationTest {
@@ -72,6 +75,16 @@ class SftpIntakeIntegrationTest {
                 assertThat(filesIn("failed")).singleElement().asString().endsWith("_unreadable.xml"));
         assertThat(invoices()).isEmpty();
         assertThat(output).contains("File unreadable.xml could not be read, moving it to directory '/failed'");
+    }
+
+    @Test
+    void movesFileBiggerThanLimitToFailed(CapturedOutput output) throws Exception {
+        sftp.execInContainer("sh", "-c", "head -c 200000 /dev/zero > %s/inbox/big.xml".formatted(HOME));
+
+        await().atMost(PROCESSING_TIMEOUT).untilAsserted(() ->
+                assertThat(filesIn("failed")).singleElement().asString().endsWith("_big.xml"));
+        assertThat(invoices()).isEmpty();
+        assertThat(output).contains("File big.xml is bigger than 102400 bytes, moving it to directory '/failed'");
     }
 
     @Test
