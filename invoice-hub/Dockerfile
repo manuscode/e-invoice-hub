@@ -15,4 +15,6 @@ COPY --from=build /workspace/invoice-hub/target/invoice-hub-*.jar /app/invoice-h
 RUN useradd --system --no-create-home app
 USER app
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/invoice-hub.jar"]
+# PDFBox has no memory limit for embedded files, a PDF bomb can exhaust the heap. After that the state of the hub is
+# undefined, so it exits and docker compose restarts it. Stored documents and the outbox survive the restart.
+ENTRYPOINT ["java", "-XX:+ExitOnOutOfMemoryError", "-jar", "/app/invoice-hub.jar"]

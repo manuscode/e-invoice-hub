@@ -6,6 +6,8 @@ services:
     build:
       context: .
       dockerfile: invoice-hub/Dockerfile
+    # The hub exits after an OutOfMemoryError, see invoice-hub/Dockerfile.
+    restart: unless-stopped
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/invoicehub
       DB_PASSWORD: invoicehub
