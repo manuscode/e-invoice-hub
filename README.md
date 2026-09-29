@@ -42,8 +42,10 @@ stateDiagram-v2
 
 ## Architecture
 
+Arrows show how invoices and data flow, not code dependencies.
+
 ```mermaid
-flowchart LR
+flowchart TB
     supplier([Supplier / portal])
     mailbox[(IMAP mailbox<br/>GreenMail)]
     sftp[(SFTP server)]
@@ -51,31 +53,35 @@ flowchart LR
 
     subgraph hub [invoice-hub]
         direction LR
-        intake --> validation --> invoice
-        delivery --> invoice
+        intake -- raw document --> validation
+        validation -- checked invoice --> invoice
+        delivery -- delivered / failed --> invoice
     end
 
     postgres[(Postgres<br/>invoices, raw documents,<br/>event publication)]
-    kafka[[Kafka<br/>invoice-accepted]]
+    kafka[[Kafka<br/>invoice-accepted,<br/>retry and DLT topics]]
     erp[ERP simulator]
     lgtm[Grafana, Loki, Tempo,<br/>Prometheus]
 
-    supplier -- REST + JWT --> intake
-    supplier -. mail .-> mailbox
-    supplier -. file .-> sftp
-    mailbox -- poll --> intake
-    sftp -- poll --> intake
-    keycloak -. keys .-> hub
-    invoice --> postgres
-    invoice -- outbox --> kafka
-    kafka --> delivery
-    delivery -- REST, retry, DLT --> erp
-    hub -. OTLP .-> lgtm
-    erp -. OTLP .-> lgtm
+    supplier -- upload via REST --> intake
+    supplier -- mail --> mailbox
+    supplier -- file --> sftp
+    mailbox -- polled attachments --> intake
+    sftp -- polled files --> intake
+    supplier -- client credentials --> keycloak
+    keycloak -- signing keys --> hub
+    invoice -- invoice, status and<br/>InvoiceAccepted in one transaction --> postgres
+    postgres -- InvoiceAccepted --> kafka
+    kafka -- InvoiceAccepted --> delivery
+    delivery -- failed attempts --> kafka
+    delivery -- invoice data via REST --> erp
+    hub -- metrics, logs, traces --> lgtm
+    erp -- metrics, logs, traces --> lgtm
 ```
 
-- **One Spring Boot service** (Java 25, Spring Boot 4) with four modules: `intake` → `validation` → `invoice` ←
-  `delivery`. Spring Modulith checks the module borders on every build.
+- **One Spring Boot service** (Java 25, Spring Boot 4) with four modules. The code dependencies go
+  `intake` → `validation` → `invoice` ← `delivery`, `invoice` doesn't know who consumes its events.
+  Spring Modulith checks the module borders on every build.
 - **Validation runs synchronously**, the caller gets the result in the response. **Delivery runs asynchronously.**
 - The invoice and the `InvoiceAccepted` event are saved in one transaction (outbox with Spring Modulith), then the
   event goes to Kafka. So no event is lost and no event is sent for an invoice that wasn't saved.
