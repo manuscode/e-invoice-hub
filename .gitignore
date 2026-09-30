@@ -44,3 +44,6 @@ build/
 
 ### Load test ###
 load-test/results/
+
+### Local SFTP keys, created by docker/sftp/generate-keys.sh ###
+docker/sftp/keys/

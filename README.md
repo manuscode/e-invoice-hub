@@ -161,8 +161,8 @@ The first start takes a few minutes because Maven downloads the dependencies and
 | ERP simulator | http://localhost:8081/erp/invoices | none |
 | Keycloak | http://localhost:8180 | `admin` / `admin` |
 
-All passwords, client secrets and keys in this repository are for the local demo only. That's why all ports are
-only open on `localhost`.
+All passwords and client secrets in this repository are for the local demo only. That's why all ports are only open
+on `localhost`. The SSH keys for SFTP are created on the first start in `docker/sftp/keys` and are not checked in.
 
 Get a token and upload an invoice:
 

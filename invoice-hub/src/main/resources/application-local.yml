@@ -2,4 +2,4 @@
 # environment variables.
 DB_PASSWORD: invoicehub
 MAIL_PASSWORD: invoices
-SFTP_PRIVATE_KEY: file:../docker/sftp/invoice-hub_ecdsa
+SFTP_PRIVATE_KEY: file:../docker/sftp/keys/invoice-hub_ecdsa

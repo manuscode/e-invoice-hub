@@ -65,7 +65,8 @@ send_mail() {
     echo "$(basename "$file") sent to $mailbox"
 }
 
-# Copied into the container, because ssh refuses the private key in docker/sftp: git doesn't keep its file mode.
+# Copied into the container, because ssh refuses the private key in docker/sftp/keys: it is readable for everyone, so
+# that the invoice-hub container can read it.
 put_into_sftp_inbox() {
     local file=$1
     docker compose cp "$file" sftp:/home/invoices/inbox/

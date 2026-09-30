@@ -25,10 +25,12 @@ services:
       SFTP_KNOWN_HOSTS: file:/config/sftp/known_hosts
       OTLP_ENDPOINT: http://lgtm:4318
     volumes:
-      - ./docker/sftp:/config/sftp:ro
+      - ./docker/sftp/keys:/config/sftp:ro
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
+      sftp-keys:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       kafka:
@@ -102,17 +104,27 @@ services:
       - "127.0.0.1:3025:3025"
       - "127.0.0.1:3143:3143"
 
+  # Creates the SSH keys for sftp and invoice-hub in docker/sftp/keys on the first start, see generate-keys.sh.
+  sftp-keys:
+    image: atmoz/sftp:alpine@sha256:a81ea210713555be76075b4b2788a4addfaa54d137cd881f3a99ac539f0be2c5
+    entrypoint: ["/sftp/generate-keys.sh"]
+    volumes:
+      - ./docker/sftp:/sftp
+
   sftp:
     image: atmoz/sftp:alpine@sha256:a81ea210713555be76075b4b2788a4addfaa54d137cd881f3a99ac539f0be2c5
-    # User without password, login only with the key of invoice-hub. Keys in docker/sftp are for local use only.
+    # User without password, login only with the key of invoice-hub.
     command: invoices::1001:100:inbox,processed,failed
     volumes:
-      - ./docker/sftp/invoice-hub_ecdsa.pub:/home/invoices/.ssh/keys/invoice-hub_ecdsa.pub:ro
-      # Fixed host key, so docker/sftp/known_hosts stays valid when the container is recreated. Only RSA, because
-      # the SSH client of invoice-hub (Apache MINA SSHD) can't read ed25519 keys without an additional provider.
-      - ./docker/sftp/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key:ro
+      # Host key and authorized key from sftp-keys. The host key stays the same when the container is recreated, so
+      # docker/sftp/keys/known_hosts stays valid.
+      - ./docker/sftp/keys:/keys:ro
+      - ./docker/sftp/install-keys.sh:/etc/sftp.d/install-keys.sh:ro
     ports:
       - "127.0.0.1:2222:22"
+    depends_on:
+      sftp-keys:
+        condition: service_completed_successfully
 
   # Demo realm with the clients demo-uploader and demo-reader. Only for local use, fixed secrets and admin/admin.
   keycloak:

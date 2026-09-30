@@ -48,7 +48,7 @@ public class TestcontainersConfiguration {
             registry.add("invoice-hub.sftp.host", sftp::getHost);
             registry.add("invoice-hub.sftp.port", sftp::sshPort);
             registry.add("invoice-hub.sftp.username", () -> SftpContainer.USERNAME);
-            registry.add("invoice-hub.sftp.private-key", () -> sftp.privateKey().toUri().toString());
+            registry.add("invoice-hub.sftp.private-key", () -> sftp.writePrivateKey().toUri().toString());
             registry.add("invoice-hub.sftp.known-hosts", () -> sftp.writeKnownHosts().toUri().toString());
         };
     }

@@ -88,7 +88,7 @@ invoice-hub:
     username: ${SFTP_USER:invoices}
     private-key: ${SFTP_PRIVATE_KEY}
     # For the SFTP server from docker-compose.yml. Relative to invoice-hub, the working directory of spring-boot:run.
-    known-hosts: ${SFTP_KNOWN_HOSTS:file:../docker/sftp/known_hosts}
+    known-hosts: ${SFTP_KNOWN_HOSTS:file:../docker/sftp/keys/known_hosts}
     inbox-directory: /inbox
     processed-directory: /processed
     failed-directory: /failed
